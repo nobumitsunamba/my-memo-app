@@ -270,7 +270,7 @@
 
   document.getElementById('memo-grid').addEventListener('click', e => {
     const btn = e.target.closest('.btn-delete');
-    if (btn) deleteMemo(Number(btn.dataset.id));
+    if (btn && confirm('このメモを削除しますか？')) deleteMemo(Number(btn.dataset.id));
   });
 
   renderMemos();
