@@ -42,8 +42,7 @@
       margin-bottom: 0.9rem;
     }
 
-    .form-card input,
-    .form-card textarea {
+    .form-card input {
       width: 100%;
       border: 1.5px solid #ddd;
       border-radius: 6px;
@@ -52,15 +51,77 @@
       color: #3d3d3d;
       background: #fafaf8;
       transition: border-color 0.2s;
-      resize: vertical;
+      margin-bottom: 0.65rem;
     }
-    .form-card input { margin-bottom: 0.65rem; }
-    .form-card textarea { overflow-y: auto; resize: none; margin-bottom: 0.9rem; }
-    .form-card input:focus,
-    .form-card textarea:focus {
+    .form-card input:focus {
       outline: none;
       border-color: #6b8f71;
       background: #fff;
+    }
+
+    /* --- Rich text toolbar --- */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.4rem 0.5rem;
+      background: #f4f4f0;
+      border: 1.5px solid #ddd;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+    }
+    .toolbar button {
+      min-width: 2rem;
+      height: 2rem;
+      padding: 0 0.4rem;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      line-height: 1;
+    }
+    .toolbar button:hover { background: #e8e8e8; }
+    .toolbar button.active { background: #d0e4d3; border-color: #6b8f71; }
+    .toolbar .color-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      font-size: 0.8rem;
+      color: #666;
+    }
+    .toolbar input[type="color"] {
+      width: 2rem;
+      height: 2rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 0.1rem;
+      cursor: pointer;
+      background: #fff;
+    }
+
+    /* --- Contenteditable editor --- */
+    .editor {
+      width: 100%;
+      height: calc(10 * 1.55 * 0.95rem);
+      overflow-y: auto;
+      border: 1.5px solid #ddd;
+      border-radius: 0 0 6px 6px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.95rem;
+      color: #3d3d3d;
+      background: #fafaf8;
+      line-height: 1.55;
+      word-break: break-word;
+      transition: border-color 0.2s;
+      margin-bottom: 0.9rem;
+    }
+    .editor:focus { outline: none; border-color: #6b8f71; background: #fff; }
+    .editor:empty::before {
+      content: attr(data-placeholder);
+      color: #aaa;
+      pointer-events: none;
     }
 
     .btn-add {
@@ -120,10 +181,9 @@
     .memo-card__body {
       font-size: 0.875rem;
       color: #666;
-      white-space: pre-wrap;
       word-break: break-word;
       line-height: 1.55;
-      height: calc(10 * 1.55 * 0.875rem);
+      max-height: calc(10 * 1.55 * 0.875rem);
       overflow-y: auto;
     }
     .memo-card__footer {
@@ -185,7 +245,6 @@
 
     @media (max-width: 480px) {
       header h1 { font-size: 1.2rem; }
-      .memo-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -199,7 +258,16 @@
   <div class="form-card" id="form-card">
     <h2 id="form-title">新しいメモを追加</h2>
     <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
-    <textarea id="memo-body" placeholder="本文（任意）" rows="10"></textarea>
+    <div class="toolbar" id="toolbar">
+      <button data-cmd="bold" title="太字"><b>B</b></button>
+      <button data-cmd="italic" title="斜体"><i>I</i></button>
+      <button data-cmd="underline" title="下線"><u>U</u></button>
+      <label class="color-wrap" title="文字色">
+        <span>色</span>
+        <input type="color" id="color-picker" value="#3d3d3d" />
+      </label>
+    </div>
+    <div class="editor" id="memo-body" contenteditable="true" data-placeholder="本文（任意）"></div>
     <p class="error-msg" id="error-msg"></p>
     <button class="btn-add" id="btn-add">追加する</button>
     <button class="btn-cancel" id="btn-cancel" style="display:none">キャンセル</button>
@@ -231,6 +299,10 @@
     return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
   function renderMemos() {
     const memos = loadMemos();
     const grid = document.getElementById('memo-grid');
@@ -249,7 +321,7 @@
       card.className = 'memo-card';
       card.innerHTML = `
         <div class="memo-card__title">${escapeHtml(memo.title)}</div>
-        ${memo.body ? `<div class="memo-card__body">${escapeHtml(memo.body)}</div>` : ''}
+        ${memo.body ? `<div class="memo-card__body">${memo.body}</div>` : ''}
         <div class="memo-card__footer">
           <span class="memo-card__date">${formatDate(memo.id)}</span>
           <div class="card-actions">
@@ -262,19 +334,16 @@
     });
   }
 
-  function escapeHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
   function resetForm() {
     editingId = null;
     document.getElementById('memo-title').value = '';
-    document.getElementById('memo-body').value  = '';
+    document.getElementById('memo-body').innerHTML = '';
     document.getElementById('error-msg').textContent = '';
     document.getElementById('form-title').textContent = '新しいメモを追加';
     document.getElementById('btn-add').textContent = '追加する';
     document.getElementById('btn-cancel').style.display = 'none';
     document.getElementById('form-card').classList.remove('is-editing');
+    updateToolbarState();
   }
 
   function startEdit(id) {
@@ -282,7 +351,7 @@
     if (!memo) return;
     editingId = id;
     document.getElementById('memo-title').value = memo.title;
-    document.getElementById('memo-body').value  = memo.body;
+    document.getElementById('memo-body').innerHTML = memo.body || '';
     document.getElementById('error-msg').textContent = '';
     document.getElementById('form-title').textContent = 'メモを編集';
     document.getElementById('btn-add').textContent = '更新する';
@@ -298,7 +367,7 @@
     const errorEl = document.getElementById('error-msg');
 
     const title = titleEl.value.trim();
-    const body  = bodyEl.value.trim();
+    const body  = bodyEl.innerHTML.trim();
 
     if (!title) {
       errorEl.textContent = 'タイトルを入力してください。';
@@ -317,7 +386,7 @@
       memos.push({ id: Date.now(), title, body });
       saveMemos(memos);
       titleEl.value = '';
-      bodyEl.value  = '';
+      bodyEl.innerHTML = '';
     }
     renderMemos();
   }
@@ -329,6 +398,30 @@
     renderMemos();
   }
 
+  /* --- Toolbar --- */
+  function updateToolbarState() {
+    document.querySelectorAll('.toolbar [data-cmd]').forEach(btn => {
+      btn.classList.toggle('active', document.queryCommandState(btn.dataset.cmd));
+    });
+  }
+
+  document.getElementById('toolbar').addEventListener('mousedown', e => {
+    const btn = e.target.closest('[data-cmd]');
+    if (!btn) return;
+    e.preventDefault();
+    document.execCommand(btn.dataset.cmd, false, null);
+    updateToolbarState();
+  });
+
+  document.getElementById('color-picker').addEventListener('input', e => {
+    document.getElementById('memo-body').focus();
+    document.execCommand('foreColor', false, e.target.value);
+  });
+
+  document.getElementById('memo-body').addEventListener('keyup', updateToolbarState);
+  document.getElementById('memo-body').addEventListener('mouseup', updateToolbarState);
+
+  /* --- Other events --- */
   document.getElementById('btn-add').addEventListener('click', submitForm);
   document.getElementById('btn-cancel').addEventListener('click', resetForm);
 
