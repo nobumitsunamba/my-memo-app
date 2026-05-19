@@ -352,7 +352,7 @@
     if (!memo) return;
     editingId = id;
     document.getElementById('memo-title').value = memo.title;
-    document.getElementById('memo-body').innerHTML = memo.body || '';
+    document.getElementById('memo-body').innerHTML = (memo.body || '').replace(/\n/g, '<br>');
     document.getElementById('error-msg').textContent = '';
     document.getElementById('form-title').textContent = 'メモを編集';
     document.getElementById('btn-add').textContent = '更新する';
