@@ -135,6 +135,18 @@
       font-size: 0.75rem;
       color: #aaa;
     }
+    .card-actions { display: flex; gap: 0.4rem; }
+    .btn-edit {
+      background: none;
+      border: 1.5px solid #8fa8c8;
+      color: #8fa8c8;
+      border-radius: 5px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-edit:hover { background: #8fa8c8; color: #fff; }
     .btn-delete {
       background: none;
       border: 1.5px solid #c0756a;
@@ -146,6 +158,22 @@
       transition: background 0.15s, color 0.15s;
     }
     .btn-delete:hover { background: #c0756a; color: #fff; }
+    .form-card.is-editing { border: 2px solid #8fa8c8; }
+    .form-card.is-editing h2 { color: #8fa8c8; }
+    .btn-cancel {
+      display: block;
+      width: 100%;
+      margin-top: 0.5rem;
+      padding: 0.55rem;
+      background: none;
+      border: 1.5px solid #bbb;
+      color: #888;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-cancel:hover { background: #f0f0f0; }
 
     .empty-state {
       text-align: center;
@@ -167,12 +195,13 @@
 </header>
 
 <main>
-  <div class="form-card">
-    <h2>新しいメモを追加</h2>
+  <div class="form-card" id="form-card">
+    <h2 id="form-title">新しいメモを追加</h2>
     <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
     <textarea id="memo-body" placeholder="本文（任意）"></textarea>
     <p class="error-msg" id="error-msg"></p>
     <button class="btn-add" id="btn-add">追加する</button>
+    <button class="btn-cancel" id="btn-cancel" style="display:none">キャンセル</button>
   </div>
 
   <p class="section-title" id="section-title"></p>
@@ -181,6 +210,7 @@
 
 <script>
   const STORAGE_KEY = 'memos_v1';
+  let editingId = null;
 
   function loadMemos() {
     try {
@@ -221,7 +251,10 @@
         ${memo.body ? `<div class="memo-card__body">${escapeHtml(memo.body)}</div>` : ''}
         <div class="memo-card__footer">
           <span class="memo-card__date">${formatDate(memo.id)}</span>
-          <button class="btn-delete" data-id="${memo.id}">削除</button>
+          <div class="card-actions">
+            <button class="btn-edit" data-id="${memo.id}">編集</button>
+            <button class="btn-delete" data-id="${memo.id}">削除</button>
+          </div>
         </div>
       `;
       grid.appendChild(card);
@@ -232,7 +265,33 @@
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function addMemo() {
+  function resetForm() {
+    editingId = null;
+    document.getElementById('memo-title').value = '';
+    document.getElementById('memo-body').value  = '';
+    document.getElementById('error-msg').textContent = '';
+    document.getElementById('form-title').textContent = '新しいメモを追加';
+    document.getElementById('btn-add').textContent = '追加する';
+    document.getElementById('btn-cancel').style.display = 'none';
+    document.getElementById('form-card').classList.remove('is-editing');
+  }
+
+  function startEdit(id) {
+    const memo = loadMemos().find(m => m.id === id);
+    if (!memo) return;
+    editingId = id;
+    document.getElementById('memo-title').value = memo.title;
+    document.getElementById('memo-body').value  = memo.body;
+    document.getElementById('error-msg').textContent = '';
+    document.getElementById('form-title').textContent = 'メモを編集';
+    document.getElementById('btn-add').textContent = '更新する';
+    document.getElementById('btn-cancel').style.display = 'block';
+    document.getElementById('form-card').classList.add('is-editing');
+    document.getElementById('form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('memo-title').focus();
+  }
+
+  function submitForm() {
     const titleEl = document.getElementById('memo-title');
     const bodyEl  = document.getElementById('memo-body');
     const errorEl = document.getElementById('error-msg');
@@ -247,30 +306,40 @@
     }
     errorEl.textContent = '';
 
-    const memos = loadMemos();
-    memos.push({ id: Date.now(), title, body });
-    saveMemos(memos);
-
-    titleEl.value = '';
-    bodyEl.value  = '';
+    if (editingId !== null) {
+      if (!confirm('更新してもいいですか？')) return;
+      const memos = loadMemos().map(m => m.id === editingId ? { ...m, title, body } : m);
+      saveMemos(memos);
+      resetForm();
+    } else {
+      const memos = loadMemos();
+      memos.push({ id: Date.now(), title, body });
+      saveMemos(memos);
+      titleEl.value = '';
+      bodyEl.value  = '';
+    }
     renderMemos();
   }
 
   function deleteMemo(id) {
     const memos = loadMemos().filter(m => m.id !== id);
     saveMemos(memos);
+    if (editingId === id) resetForm();
     renderMemos();
   }
 
-  document.getElementById('btn-add').addEventListener('click', addMemo);
+  document.getElementById('btn-add').addEventListener('click', submitForm);
+  document.getElementById('btn-cancel').addEventListener('click', resetForm);
 
   document.getElementById('memo-title').addEventListener('keydown', e => {
-    if (e.key === 'Enter') addMemo();
+    if (e.key === 'Enter') submitForm();
   });
 
   document.getElementById('memo-grid').addEventListener('click', e => {
-    const btn = e.target.closest('.btn-delete');
-    if (btn && confirm('このメモを削除しますか？')) deleteMemo(Number(btn.dataset.id));
+    const delBtn  = e.target.closest('.btn-delete');
+    const editBtn = e.target.closest('.btn-edit');
+    if (delBtn && confirm('このメモを削除しますか？')) deleteMemo(Number(delBtn.dataset.id));
+    if (editBtn) startEdit(Number(editBtn.dataset.id));
   });
 
   renderMemos();
