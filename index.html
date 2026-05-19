@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>メモ帳</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
+      background: #f7f4ef;
+      color: #3d3d3d;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #6b8f71;
+      color: #fff;
+      padding: 1rem 1.5rem;
+      text-align: center;
+    }
+    header h1 { font-size: 1.4rem; letter-spacing: 0.05em; }
+
+    main {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem;
+    }
+
+    /* --- Form --- */
+    .form-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 1.25rem;
+      margin-bottom: 1.75rem;
+    }
+    .form-card h2 {
+      font-size: 1rem;
+      color: #6b8f71;
+      margin-bottom: 0.9rem;
+    }
+
+    .form-card input,
+    .form-card textarea {
+      width: 100%;
+      border: 1.5px solid #ddd;
+      border-radius: 6px;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.95rem;
+      color: #3d3d3d;
+      background: #fafaf8;
+      transition: border-color 0.2s;
+      resize: vertical;
+    }
+    .form-card input { margin-bottom: 0.65rem; }
+    .form-card textarea { min-height: 90px; margin-bottom: 0.9rem; }
+    .form-card input:focus,
+    .form-card textarea:focus {
+      outline: none;
+      border-color: #6b8f71;
+      background: #fff;
+    }
+
+    .btn-add {
+      display: block;
+      width: 100%;
+      padding: 0.7rem;
+      background: #6b8f71;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-add:hover { background: #577a5c; }
+
+    /* --- Error message --- */
+    .error-msg {
+      color: #c0756a;
+      font-size: 0.85rem;
+      margin-bottom: 0.5rem;
+      min-height: 1.2em;
+    }
+
+    /* --- Memo list --- */
+    .section-title {
+      font-size: 0.9rem;
+      color: #888;
+      margin-bottom: 0.9rem;
+      letter-spacing: 0.03em;
+    }
+
+    .memo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .memo-card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      padding: 1rem 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    .memo-card__title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #3d3d3d;
+      word-break: break-word;
+    }
+    .memo-card__body {
+      font-size: 0.875rem;
+      color: #666;
+      white-space: pre-wrap;
+      word-break: break-word;
+      flex: 1;
+      line-height: 1.55;
+    }
+    .memo-card__footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 0.5rem;
+    }
+    .memo-card__date {
+      font-size: 0.75rem;
+      color: #aaa;
+    }
+    .btn-delete {
+      background: none;
+      border: 1.5px solid #c0756a;
+      color: #c0756a;
+      border-radius: 5px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-delete:hover { background: #c0756a; color: #fff; }
+
+    .empty-state {
+      text-align: center;
+      color: #bbb;
+      font-size: 0.9rem;
+      padding: 2rem 0;
+    }
+
+    @media (max-width: 480px) {
+      header h1 { font-size: 1.2rem; }
+      .memo-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📝 メモ帳</h1>
+</header>
+
+<main>
+  <div class="form-card">
+    <h2>新しいメモを追加</h2>
+    <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
+    <textarea id="memo-body" placeholder="本文（任意）"></textarea>
+    <p class="error-msg" id="error-msg"></p>
+    <button class="btn-add" id="btn-add">追加する</button>
+  </div>
+
+  <p class="section-title" id="section-title"></p>
+  <div class="memo-grid" id="memo-grid"></div>
+</main>
+
+<script>
+  const STORAGE_KEY = 'memos_v1';
+
+  function loadMemos() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveMemos(memos) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(memos));
+  }
+
+  function formatDate(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function renderMemos() {
+    const memos = loadMemos();
+    const grid = document.getElementById('memo-grid');
+    const sectionTitle = document.getElementById('section-title');
+
+    grid.innerHTML = '';
+    sectionTitle.textContent = memos.length ? `メモ一覧（${memos.length}件）` : '';
+
+    if (memos.length === 0) {
+      grid.innerHTML = '<p class="empty-state">メモがありません。<br>上のフォームから追加してみましょう！</p>';
+      return;
+    }
+
+    memos.slice().reverse().forEach(memo => {
+      const card = document.createElement('div');
+      card.className = 'memo-card';
+      card.innerHTML = `
+        <div class="memo-card__title">${escapeHtml(memo.title)}</div>
+        ${memo.body ? `<div class="memo-card__body">${escapeHtml(memo.body)}</div>` : ''}
+        <div class="memo-card__footer">
+          <span class="memo-card__date">${formatDate(memo.id)}</span>
+          <button class="btn-delete" data-id="${memo.id}">削除</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function addMemo() {
+    const titleEl = document.getElementById('memo-title');
+    const bodyEl  = document.getElementById('memo-body');
+    const errorEl = document.getElementById('error-msg');
+
+    const title = titleEl.value.trim();
+    const body  = bodyEl.value.trim();
+
+    if (!title) {
+      errorEl.textContent = 'タイトルを入力してください。';
+      titleEl.focus();
+      return;
+    }
+    errorEl.textContent = '';
+
+    const memos = loadMemos();
+    memos.push({ id: Date.now(), title, body });
+    saveMemos(memos);
+
+    titleEl.value = '';
+    bodyEl.value  = '';
+    renderMemos();
+  }
+
+  function deleteMemo(id) {
+    const memos = loadMemos().filter(m => m.id !== id);
+    saveMemos(memos);
+    renderMemos();
+  }
+
+  document.getElementById('btn-add').addEventListener('click', addMemo);
+
+  document.getElementById('memo-title').addEventListener('keydown', e => {
+    if (e.key === 'Enter') addMemo();
+  });
+
+  document.getElementById('memo-grid').addEventListener('click', e => {
+    const btn = e.target.closest('.btn-delete');
+    if (btn) deleteMemo(Number(btn.dataset.id));
+  });
+
+  renderMemos();
+</script>
+</body>
+</html>
