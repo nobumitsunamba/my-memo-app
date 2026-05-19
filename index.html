@@ -7,14 +7,17 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
+    html, body {
+      height: 100%;
       font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', sans-serif;
       background: #f7f4ef;
       color: #3d3d3d;
-      min-height: 100vh;
     }
 
+    body { display: flex; flex-direction: column; }
+
     header {
+      flex-shrink: 0;
       background: #6b8f71;
       color: #fff;
       padding: 1rem 1.5rem;
@@ -22,10 +25,69 @@
     }
     header h1 { font-size: 1.4rem; letter-spacing: 0.05em; }
 
-    main {
-      max-width: 720px;
-      margin: 0 auto;
+    /* --- Two-column layout --- */
+    .layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* --- Sidebar --- */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      background: #edeae4;
+      border-right: 1px solid #d6d2cb;
+      padding: 1rem 0.75rem;
+    }
+    .sidebar__heading {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #999;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+      padding-left: 0.25rem;
+    }
+    .sidebar-item {
+      padding: 0.55rem 0.6rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 0.3rem;
+    }
+    .sidebar-item:hover { background: #dedad3; }
+    .sidebar-item.active { background: #c9e0cc; }
+    .sidebar-item__title {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #3d3d3d;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sidebar-item__date {
+      font-size: 0.72rem;
+      color: #aaa;
+      margin-top: 0.15rem;
+    }
+    .sidebar-empty {
+      font-size: 0.82rem;
+      color: #bbb;
+      text-align: center;
+      padding: 1rem 0;
+    }
+
+    /* --- Content panel --- */
+    .content-panel {
+      flex: 1;
+      overflow-y: auto;
       padding: 1.5rem 1rem;
+    }
+    .content-inner {
+      max-width: 680px;
+      margin: 0 auto;
     }
 
     /* --- Form --- */
@@ -41,7 +103,6 @@
       color: #6b8f71;
       margin-bottom: 0.9rem;
     }
-
     .form-card input {
       width: 100%;
       border: 1.5px solid #ddd;
@@ -53,13 +114,9 @@
       transition: border-color 0.2s;
       margin-bottom: 0.65rem;
     }
-    .form-card input:focus {
-      outline: none;
-      border-color: #6b8f71;
-      background: #fff;
-    }
+    .form-card input:focus { outline: none; border-color: #6b8f71; background: #fff; }
 
-    /* --- Rich text toolbar --- */
+    /* --- Toolbar --- */
     .toolbar {
       display: flex;
       align-items: center;
@@ -101,7 +158,7 @@
       background: #fff;
     }
 
-    /* --- Contenteditable editor --- */
+    /* --- Editor --- */
     .editor {
       width: 100%;
       height: calc(10 * 1.55 * 0.95rem);
@@ -138,7 +195,6 @@
     }
     .btn-add:hover { background: #577a5c; }
 
-    /* --- Error message --- */
     .error-msg {
       color: #c0756a;
       font-size: 0.85rem;
@@ -153,12 +209,7 @@
       margin-bottom: 0.9rem;
       letter-spacing: 0.03em;
     }
-
-    .memo-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1rem;
-    }
+    .memo-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 
     .memo-card {
       background: #fff;
@@ -169,6 +220,7 @@
       flex-direction: column;
       gap: 0.4rem;
       animation: fadeIn 0.2s ease;
+      scroll-margin-top: 1rem;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
@@ -193,10 +245,7 @@
       align-items: center;
       margin-top: 0.5rem;
     }
-    .memo-card__date {
-      font-size: 0.75rem;
-      color: #aaa;
-    }
+    .memo-card__date { font-size: 0.75rem; color: #aaa; }
     .card-actions { display: flex; gap: 0.4rem; }
     .btn-edit {
       background: none;
@@ -220,6 +269,7 @@
       transition: background 0.15s, color 0.15s;
     }
     .btn-delete:hover { background: #c0756a; color: #fff; }
+
     .form-card.is-editing { border: 2px solid #8fa8c8; }
     .form-card.is-editing h2 { color: #8fa8c8; }
     .btn-cancel {
@@ -244,8 +294,16 @@
       padding: 2rem 0;
     }
 
-    @media (max-width: 480px) {
+    /* --- Mobile --- */
+    @media (max-width: 600px) {
       header h1 { font-size: 1.2rem; }
+      .layout { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        max-height: 160px;
+        border-right: none;
+        border-bottom: 1px solid #d6d2cb;
+      }
     }
   </style>
 </head>
@@ -255,39 +313,45 @@
   <h1>📝 メモ帳</h1>
 </header>
 
-<main>
-  <div class="form-card" id="form-card">
-    <h2 id="form-title">新しいメモを追加</h2>
-    <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
-    <div class="toolbar" id="toolbar">
-      <button data-cmd="bold" title="太字"><b>B</b></button>
-      <button data-cmd="italic" title="斜体"><i>I</i></button>
-      <button data-cmd="underline" title="下線"><u>U</u></button>
-      <label class="color-wrap" title="文字色">
-        <span>色</span>
-        <input type="color" id="color-picker" value="#3d3d3d" />
-      </label>
-    </div>
-    <div class="editor" id="memo-body" contenteditable="true" data-placeholder="本文（任意）"></div>
-    <p class="error-msg" id="error-msg"></p>
-    <button class="btn-add" id="btn-add">追加する</button>
-    <button class="btn-cancel" id="btn-cancel" style="display:none">キャンセル</button>
-  </div>
+<div class="layout">
+  <aside class="sidebar" id="sidebar">
+    <p class="sidebar__heading">メモ一覧</p>
+    <div id="sidebar-list"></div>
+  </aside>
 
-  <p class="section-title" id="section-title"></p>
-  <div class="memo-grid" id="memo-grid"></div>
-</main>
+  <div class="content-panel" id="content-panel">
+    <div class="content-inner">
+      <div class="form-card" id="form-card">
+        <h2 id="form-title">新しいメモを追加</h2>
+        <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
+        <div class="toolbar" id="toolbar">
+          <button data-cmd="bold" title="太字"><b>B</b></button>
+          <button data-cmd="italic" title="斜体"><i>I</i></button>
+          <button data-cmd="underline" title="下線"><u>U</u></button>
+          <label class="color-wrap" title="文字色">
+            <span>色</span>
+            <input type="color" id="color-picker" value="#3d3d3d" />
+          </label>
+        </div>
+        <div class="editor" id="memo-body" contenteditable="true" data-placeholder="本文（任意）"></div>
+        <p class="error-msg" id="error-msg"></p>
+        <button class="btn-add" id="btn-add">追加する</button>
+        <button class="btn-cancel" id="btn-cancel" style="display:none">キャンセル</button>
+      </div>
+
+      <p class="section-title" id="section-title"></p>
+      <div class="memo-grid" id="memo-grid"></div>
+    </div>
+  </div>
+</div>
 
 <script>
   const STORAGE_KEY = 'memos_v1';
   let editingId = null;
 
   function loadMemos() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-    } catch {
-      return [];
-    }
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+    catch { return []; }
   }
 
   function saveMemos(memos) {
@@ -304,35 +368,71 @@
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
+  function renderSidebar(memos) {
+    const list = document.getElementById('sidebar-list');
+    list.innerHTML = '';
+    if (memos.length === 0) {
+      list.innerHTML = '<p class="sidebar-empty">メモなし</p>';
+      return;
+    }
+    memos.slice().reverse().forEach(memo => {
+      const item = document.createElement('div');
+      item.className = 'sidebar-item';
+      item.dataset.id = memo.id;
+      item.innerHTML = `
+        <div class="sidebar-item__title">${escapeHtml(memo.title)}</div>
+        <div class="sidebar-item__date">${formatDate(memo.id)}</div>
+      `;
+      item.addEventListener('click', () => scrollToMemo(memo.id));
+      list.appendChild(item);
+    });
+  }
+
+  function scrollToMemo(id) {
+    const panel = document.getElementById('content-panel');
+    const card  = panel.querySelector(`.memo-card[data-id="${id}"]`);
+    if (!card) return;
+    panel.scrollTo({ top: card.offsetTop - panel.offsetTop, behavior: 'smooth' });
+    setActiveSidebarItem(id);
+  }
+
+  function setActiveSidebarItem(id) {
+    document.querySelectorAll('.sidebar-item').forEach(el => {
+      el.classList.toggle('active', Number(el.dataset.id) === id);
+    });
+  }
+
   function renderMemos() {
     const memos = loadMemos();
-    const grid = document.getElementById('memo-grid');
+    const grid  = document.getElementById('memo-grid');
     const sectionTitle = document.getElementById('section-title');
 
     grid.innerHTML = '';
-    sectionTitle.textContent = memos.length ? `メモ一覧（${memos.length}件）` : '';
+    sectionTitle.textContent = memos.length ? `メモ（${memos.length}件）` : '';
 
     if (memos.length === 0) {
       grid.innerHTML = '<p class="empty-state">メモがありません。<br>上のフォームから追加してみましょう！</p>';
-      return;
+    } else {
+      memos.slice().reverse().forEach(memo => {
+        const card = document.createElement('div');
+        card.className = 'memo-card';
+        card.dataset.id = memo.id;
+        card.innerHTML = `
+          <div class="memo-card__title">${escapeHtml(memo.title)}</div>
+          ${memo.body ? `<div class="memo-card__body">${memo.body}</div>` : ''}
+          <div class="memo-card__footer">
+            <span class="memo-card__date">${formatDate(memo.id)}</span>
+            <div class="card-actions">
+              <button class="btn-edit" data-id="${memo.id}">編集</button>
+              <button class="btn-delete" data-id="${memo.id}">削除</button>
+            </div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
     }
 
-    memos.slice().reverse().forEach(memo => {
-      const card = document.createElement('div');
-      card.className = 'memo-card';
-      card.innerHTML = `
-        <div class="memo-card__title">${escapeHtml(memo.title)}</div>
-        ${memo.body ? `<div class="memo-card__body">${memo.body}</div>` : ''}
-        <div class="memo-card__footer">
-          <span class="memo-card__date">${formatDate(memo.id)}</span>
-          <div class="card-actions">
-            <button class="btn-edit" data-id="${memo.id}">編集</button>
-            <button class="btn-delete" data-id="${memo.id}">削除</button>
-          </div>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
+    renderSidebar(memos);
   }
 
   function resetForm() {
@@ -344,6 +444,7 @@
     document.getElementById('btn-add').textContent = '追加する';
     document.getElementById('btn-cancel').style.display = 'none';
     document.getElementById('form-card').classList.remove('is-editing');
+    setActiveSidebarItem(null);
     updateToolbarState();
   }
 
@@ -358,7 +459,8 @@
     document.getElementById('btn-add').textContent = '更新する';
     document.getElementById('btn-cancel').style.display = 'block';
     document.getElementById('form-card').classList.add('is-editing');
-    document.getElementById('form-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const panel = document.getElementById('content-panel');
+    panel.scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('memo-title').focus();
   }
 
@@ -425,7 +527,6 @@
   /* --- Other events --- */
   document.getElementById('btn-add').addEventListener('click', submitForm);
   document.getElementById('btn-cancel').addEventListener('click', resetForm);
-
   document.getElementById('memo-title').addEventListener('keydown', e => {
     if (e.key === 'Enter') submitForm();
   });
