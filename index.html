@@ -55,7 +55,7 @@
       resize: vertical;
     }
     .form-card input { margin-bottom: 0.65rem; }
-    .form-card textarea { min-height: 90px; margin-bottom: 0.9rem; }
+    .form-card textarea { overflow-y: auto; resize: none; margin-bottom: 0.9rem; }
     .form-card input:focus,
     .form-card textarea:focus {
       outline: none;
@@ -95,7 +95,7 @@
 
     .memo-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      grid-template-columns: 1fr;
       gap: 1rem;
     }
 
@@ -198,7 +198,7 @@
   <div class="form-card" id="form-card">
     <h2 id="form-title">新しいメモを追加</h2>
     <input type="text" id="memo-title" placeholder="タイトル（必須）" maxlength="80" />
-    <textarea id="memo-body" placeholder="本文（任意）"></textarea>
+    <textarea id="memo-body" placeholder="本文（任意）" rows="10"></textarea>
     <p class="error-msg" id="error-msg"></p>
     <button class="btn-add" id="btn-add">追加する</button>
     <button class="btn-cancel" id="btn-cancel" style="display:none">キャンセル</button>
