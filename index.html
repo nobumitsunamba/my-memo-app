@@ -25,7 +25,6 @@
     }
     header h1 { font-size: 1.4rem; letter-spacing: 0.05em; }
 
-    /* --- Two-column layout --- */
     .layout {
       flex: 1;
       display: flex;
@@ -193,7 +192,8 @@
       cursor: pointer;
       transition: background 0.2s;
     }
-    .btn-add:hover { background: #577a5c; }
+    .btn-add:hover:not(:disabled) { background: #577a5c; }
+    .btn-add:disabled { opacity: 0.6; cursor: not-allowed; }
 
     .error-msg {
       color: #c0756a;
@@ -294,7 +294,6 @@
       padding: 2rem 0;
     }
 
-    /* --- Mobile --- */
     @media (max-width: 600px) {
       header h1 { font-size: 1.2rem; }
       .layout { flex-direction: column; }
@@ -345,21 +344,17 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-  const STORAGE_KEY = 'memos_v1';
+  const SUPABASE_URL = 'https://ddqprjwyacvsjsffheya.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkcXByand5YWN2c2pzZmZoZXlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyNzE5NTYsImV4cCI6MjA5NDg0Nzk1Nn0.03DIsFo4AiYj73wEmtDJhDiRdpCGpzjkyPNR5wkxx_Y';
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
   let editingId = null;
+  let memos = [];
 
-  function loadMemos() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
-    catch { return []; }
-  }
-
-  function saveMemos(memos) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(memos));
-  }
-
-  function formatDate(ts) {
-    const d = new Date(ts);
+  function formatDate(isoStr) {
+    const d = new Date(isoStr);
     const pad = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
@@ -368,23 +363,76 @@
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  function renderSidebar(memos) {
-    const list = document.getElementById('sidebar-list');
-    list.innerHTML = '';
-    if (memos.length === 0) {
-      list.innerHTML = '<p class="sidebar-empty">メモなし</p>';
+  function setLoading(loading) {
+    const btn = document.getElementById('btn-add');
+    btn.disabled = loading;
+    btn.textContent = loading ? '処理中...' : (editingId !== null ? '更新する' : '追加する');
+  }
+
+  async function fetchAndRender() {
+    const { data, error } = await db
+      .from('memos')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.error('メモの取得に失敗しました:', error);
       return;
     }
-    memos.slice().reverse().forEach(memo => {
+    memos = data;
+    renderAll(memos);
+  }
+
+  function renderAll(list) {
+    renderSidebar(list);
+    renderMemoGrid(list);
+  }
+
+  function renderSidebar(list) {
+    const el = document.getElementById('sidebar-list');
+    el.innerHTML = '';
+    if (list.length === 0) {
+      el.innerHTML = '<p class="sidebar-empty">メモなし</p>';
+      return;
+    }
+    list.forEach(memo => {
       const item = document.createElement('div');
       item.className = 'sidebar-item';
       item.dataset.id = memo.id;
       item.innerHTML = `
         <div class="sidebar-item__title">${escapeHtml(memo.title)}</div>
-        <div class="sidebar-item__date">${formatDate(memo.id)}</div>
+        <div class="sidebar-item__date">${formatDate(memo.created_at)}</div>
       `;
       item.addEventListener('click', () => scrollToMemo(memo.id));
-      list.appendChild(item);
+      el.appendChild(item);
+    });
+  }
+
+  function renderMemoGrid(list) {
+    const grid = document.getElementById('memo-grid');
+    const sectionTitle = document.getElementById('section-title');
+    grid.innerHTML = '';
+    sectionTitle.textContent = list.length ? `メモ（${list.length}件）` : '';
+
+    if (list.length === 0) {
+      grid.innerHTML = '<p class="empty-state">メモがありません。<br>上のフォームから追加してみましょう！</p>';
+      return;
+    }
+    list.forEach(memo => {
+      const card = document.createElement('div');
+      card.className = 'memo-card';
+      card.dataset.id = memo.id;
+      card.innerHTML = `
+        <div class="memo-card__title">${escapeHtml(memo.title)}</div>
+        ${memo.body ? `<div class="memo-card__body">${memo.body}</div>` : ''}
+        <div class="memo-card__footer">
+          <span class="memo-card__date">${formatDate(memo.created_at)}</span>
+          <div class="card-actions">
+            <button class="btn-edit" data-id="${memo.id}">編集</button>
+            <button class="btn-delete" data-id="${memo.id}">削除</button>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
     });
   }
 
@@ -398,41 +446,8 @@
 
   function setActiveSidebarItem(id) {
     document.querySelectorAll('.sidebar-item').forEach(el => {
-      el.classList.toggle('active', Number(el.dataset.id) === id);
+      el.classList.toggle('active', el.dataset.id === id);
     });
-  }
-
-  function renderMemos() {
-    const memos = loadMemos();
-    const grid  = document.getElementById('memo-grid');
-    const sectionTitle = document.getElementById('section-title');
-
-    grid.innerHTML = '';
-    sectionTitle.textContent = memos.length ? `メモ（${memos.length}件）` : '';
-
-    if (memos.length === 0) {
-      grid.innerHTML = '<p class="empty-state">メモがありません。<br>上のフォームから追加してみましょう！</p>';
-    } else {
-      memos.slice().reverse().forEach(memo => {
-        const card = document.createElement('div');
-        card.className = 'memo-card';
-        card.dataset.id = memo.id;
-        card.innerHTML = `
-          <div class="memo-card__title">${escapeHtml(memo.title)}</div>
-          ${memo.body ? `<div class="memo-card__body">${memo.body}</div>` : ''}
-          <div class="memo-card__footer">
-            <span class="memo-card__date">${formatDate(memo.id)}</span>
-            <div class="card-actions">
-              <button class="btn-edit" data-id="${memo.id}">編集</button>
-              <button class="btn-delete" data-id="${memo.id}">削除</button>
-            </div>
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-    }
-
-    renderSidebar(memos);
   }
 
   function resetForm() {
@@ -449,7 +464,7 @@
   }
 
   function startEdit(id) {
-    const memo = loadMemos().find(m => m.id === id);
+    const memo = memos.find(m => m.id === id);
     if (!memo) return;
     editingId = id;
     document.getElementById('memo-title').value = memo.title;
@@ -459,12 +474,11 @@
     document.getElementById('btn-add').textContent = '更新する';
     document.getElementById('btn-cancel').style.display = 'block';
     document.getElementById('form-card').classList.add('is-editing');
-    const panel = document.getElementById('content-panel');
-    panel.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById('content-panel').scrollTo({ top: 0, behavior: 'smooth' });
     document.getElementById('memo-title').focus();
   }
 
-  function submitForm() {
+  async function submitForm() {
     const titleEl = document.getElementById('memo-title');
     const bodyEl  = document.getElementById('memo-body');
     const errorEl = document.getElementById('error-msg');
@@ -479,26 +493,40 @@
     }
     errorEl.textContent = '';
 
+    setLoading(true);
+
     if (editingId !== null) {
-      if (!confirm('更新してもいいですか？')) return;
-      const memos = loadMemos().map(m => m.id === editingId ? { ...m, title, body } : m);
-      saveMemos(memos);
+      if (!confirm('更新してもいいですか？')) { setLoading(false); return; }
+      const { error } = await db.from('memos').update({ title, body }).eq('id', editingId);
+      if (error) {
+        console.error('メモの更新に失敗しました:', error);
+        setLoading(false);
+        return;
+      }
       resetForm();
     } else {
-      const memos = loadMemos();
-      memos.push({ id: Date.now(), title, body });
-      saveMemos(memos);
+      const { error } = await db.from('memos').insert({ title, body });
+      if (error) {
+        console.error('メモの追加に失敗しました:', error);
+        setLoading(false);
+        return;
+      }
       titleEl.value = '';
       bodyEl.innerHTML = '';
     }
-    renderMemos();
+
+    await fetchAndRender();
+    setLoading(false);
   }
 
-  function deleteMemo(id) {
-    const memos = loadMemos().filter(m => m.id !== id);
-    saveMemos(memos);
+  async function deleteMemo(id) {
+    const { error } = await db.from('memos').delete().eq('id', id);
+    if (error) {
+      console.error('メモの削除に失敗しました:', error);
+      return;
+    }
     if (editingId === id) resetForm();
-    renderMemos();
+    await fetchAndRender();
   }
 
   /* --- Toolbar --- */
@@ -534,11 +562,11 @@
   document.getElementById('memo-grid').addEventListener('click', e => {
     const delBtn  = e.target.closest('.btn-delete');
     const editBtn = e.target.closest('.btn-edit');
-    if (delBtn && confirm('このメモを削除しますか？')) deleteMemo(Number(delBtn.dataset.id));
-    if (editBtn) startEdit(Number(editBtn.dataset.id));
+    if (delBtn && confirm('このメモを削除しますか？')) deleteMemo(delBtn.dataset.id);
+    if (editBtn) startEdit(editBtn.dataset.id);
   });
 
-  renderMemos();
+  fetchAndRender();
 </script>
 </body>
 </html>
